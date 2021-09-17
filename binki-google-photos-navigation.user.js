@@ -1,3 +1,12 @@
+// ==UserScript==
+// @name binki-google-photos-navigation
+// @version 1.0
+// @grant none
+// @author Nathan Phillip Brink (binki) (@ohnobinki)
+// @homepageURL https://github.com/binki/binki-google-photos-navigation
+// @include https://photos.google.com/*
+// ==/UserScript==
+
 (() => {
   const isTesting = typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module;
   const maybeUseAssert = action => {
