@@ -1,0 +1,12 @@
+{
+  "name": "binki-google-photos-navigation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "binki-google-photos-navigation.user.js",
+  "scripts": {
+    "test": "node binki-google-photos-navigation.user.js"
+  },
+  "keywords": [],
+  "author": "binki",
+  "license": "MIT"
+}
