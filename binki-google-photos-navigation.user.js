@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name binki-google-photos-navigation
-// @version 1.1
+// @version 1.2
 // @grant none
 // @author Nathan Phillip Brink (binki) (@ohnobinki)
 // @homepageURL https://github.com/binki/binki-google-photos-navigation
