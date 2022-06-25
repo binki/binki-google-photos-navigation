@@ -5,6 +5,7 @@
 // @author Nathan Phillip Brink (binki) (@ohnobinki)
 // @homepageURL https://github.com/binki/binki-google-photos-navigation
 // @include https://photos.google.com/*
+// @require https://github.com/binki/binki-userscript-when-element-changed-async/raw/master/binki-userscript-when-element-changed-async.js
 // ==/UserScript==
 
 (() => {
@@ -91,7 +92,7 @@
       arrowButton.svg.parentNode.click();
 
       while (true) {
-        await whenChanged(cWizParent);
+        await whenElementChangedAsync(cWizParent);
         const foundTextarea = [...cWizParent.querySelectorAll('input, textarea')].find(textarea => {
           return textarea.offsetParent;
         });
@@ -227,20 +228,6 @@
     }
     const [meanMidXValue, meanExtremeXValue] = [midXValues, extremeXValues].map(xValues => xValues.reduce((acc, value) => acc + value, 0)/xValues.length);
     return meanMidXValue < meanExtremeXValue ? -1 : meanMidXValue > meanExtremeXValue ? 1 : 0;
-  }
-
-  function whenChanged(target) {
-    return new Promise((resolve, reject) => {
-      const observer = new MutationObserver(() => {
-        observer.disconnect();
-        resolve();
-      });
-      observer.observe(target, {
-        attributes: true,
-        childList: true,
-        subtree: true,
-      });
-    });
   }
 
   maybeUseAssert(assert => {
