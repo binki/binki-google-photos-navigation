@@ -5,7 +5,8 @@
 // @author Nathan Phillip Brink (binki) (@ohnobinki)
 // @homepageURL https://github.com/binki/binki-google-photos-navigation
 // @include https://photos.google.com/*
-// @require https://github.com/binki/binki-userscript-when-element-changed-async/raw/master/binki-userscript-when-element-changed-async.js
+// @require https://github.com/binki/binki-userscript-delay-async/raw/252c301cdbd21eb41fa0227c49cd53dc5a6d1e58/binki-userscript-delay-async.js
+// @require https://github.com/binki/binki-userscript-when-element-changed-async/raw/88cf57674ab8fcaa0e86bdf5209342ec7780739a/binki-userscript-when-element-changed-async.js
 // ==/UserScript==
 
 (() => {
@@ -17,6 +18,20 @@
   };
 
   let lastNavigationPromise = Promise.resolve();
+  
+  function findCWizParent (node) {
+    if (!node) return;
+    if (node.localName === 'c-wiz') {
+      return node.parentNode;
+    }
+    return findCWizParent(node.parentNode);
+  }
+  
+  function findTextarea(cWizParent) {
+    return [...cWizParent.querySelectorAll('input, textarea')].find(textarea => {
+      return textarea.offsetParent;
+    });
+  }
 
   function navigate(keyCode, key, right) {
     // Wait until the prior navigation has completed prior to acting
@@ -28,13 +43,7 @@
 
       // The textarea has a c-wiz ancestor. The Photos stuff seems to
       // recycle/cache c-wiz but create a new one upon navigation. So to see the new one be selected/displayed, have to find the parent of our c-wiz and watch for changes.
-      const cWizParent = function findCWizParent (node) {
-        if (!node) return;
-        if (node.localName === 'c-wiz') {
-          return node.parentNode;
-        }
-        return findCWizParent(node.parentNode);
-      }(originalTextarea);
+      const cWizParent = findCWizParent(originalTextarea);
       if (!cWizParent) return;
       
 
@@ -93,9 +102,7 @@
 
       while (true) {
         await whenElementChangedAsync(cWizParent);
-        const foundTextarea = [...cWizParent.querySelectorAll('input, textarea')].find(textarea => {
-          return textarea.offsetParent;
-        });
+        const foundTextarea = findTextarea(cWizParent);
         if (!foundTextarea || foundTextarea === originalTextarea) continue;
         foundTextarea.focus();
         break;
@@ -291,6 +298,57 @@
     assert.deepEqual(getPathArrowDirection('M15.41 16.09l-4.58-4.59 4.58-4.59L14 5.5l-6 6 6 6z'), -1);
     assert.deepEqual(getPathArrowDirection('M8.59 16.34l4.58-4.59-4.58-4.59L10 5.75l6 6-6 6z'), 1);
   });
+  
+  async function addAlbum(textElement) {
+    const cWizParent = findCWizParent(textElement);
+    // Open the dropdown menu.
+    document.querySelector('[role=menubar] > span > div > div + div + div:last-child').firstChild.click();
+    while (true) {
+      // The :first-child:last-child is used because, on edited photos, there is an extra optino to download
+      // the original of the photo. This causes there to be an extra entry on the menu. To skip over the “rotate left”
+      // option, we require the div to be first and last which excludes any menu entry with a displayed keyboard shortcut
+      // because the keyboard shortcut entries will have an extra element. So be sure to test any changes with both
+      // edited and unedited photos!
+      const menuSelector = 'div[role=menu][data-back-to-cancel=false] > div > div > span + span + span + span > div[jsaction] > div:first-child:last-child';
+      const addToAlbumButton = document.querySelector(menuSelector);
+      if (!addToAlbumButton) {
+        await whenElementChangedAsync(document.body);
+        continue;
+      }
+      // It takes time to load and I do not think it shows progress, so just keep clicking until it works x.x.
+      while (true) {
+        addToAlbumButton.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+        addToAlbumButton.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+        await delayAsync(20);
+        if (!document.querySelector(menuSelector)) {
+          // Wait for the dialog to appear.
+          while (true) {
+            const dialogSelector = '[role=dialog]';
+            if (!document.querySelector(dialogSelector)) continue;
+            console.log('found dialog. Waiting for it to close');
+            while (true) {
+              if (document.querySelector(dialogSelector)) {
+                await whenElementChangedAsync(document.body);
+                continue;
+              }
+              // If the dialog is closed by cancelling, we will end up incorrectly attempting to refocus the
+              // textarea later. For now, am going to accept that as a limitation.
+              console.log('Dialog closed. Waiting for CWiz to be recreated.');
+              while (true) {
+                const newTextElement = findTextarea(cWizParent);
+                if (!newTextElement || newTextElement === textElement) {
+                	await whenElementChangedAsync(cWizParent);
+                  continue;
+                }
+                newTextElement.focus();
+	              return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   if (!isTesting) {
     document.body.addEventListener('keydown', e => {
@@ -308,6 +366,9 @@
         } else if (e.key === ']') {
           navigate(221, e.key, true);
           e.preventDefault();
+        } else if (e.key === '\'') {
+          // Launch the “Add to album” workflow.
+          addAlbum(e.target);
         }
       }
     });

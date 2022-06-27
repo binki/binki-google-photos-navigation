@@ -14,5 +14,6 @@ This userscript adds the following keyboard shortcuts to Google Photos which are
 
 * <kbd>Ctrl</kbd> + <kbd>\[</kbd>: Navigate left.
 * <kbd>Ctrl</kbd> + <kbd>\]</kbd>: Navigate right.
+* <kbd>Ctrl</kbd> + <kbd>'</kbd>: Launch Add to Album dialog.
 
 [Install](binki-google-photos-navigation.user.js?raw=1)
