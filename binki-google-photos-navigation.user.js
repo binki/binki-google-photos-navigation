@@ -7,6 +7,7 @@
 // @include https://photos.google.com/*
 // @require https://github.com/binki/binki-userscript-delay-async/raw/252c301cdbd21eb41fa0227c49cd53dc5a6d1e58/binki-userscript-delay-async.js
 // @require https://github.com/binki/binki-userscript-when-element-changed-async/raw/88cf57674ab8fcaa0e86bdf5209342ec7780739a/binki-userscript-when-element-changed-async.js
+// @require https://github.com/binki/binki-userscript-when-element-query-selector-async/raw/0a9c204bdc304a9e82f1c31d090fdfdf7b554930/binki-userscript-when-element-query-selector-async.js
 // ==/UserScript==
 
 (() => {
@@ -18,6 +19,10 @@
   };
 
   let lastNavigationPromise = Promise.resolve();
+  
+  function findFocusedTextarea() {
+    return document.querySelector('input:focus, textarea:focus');
+  }
   
   function findCWizParent (node) {
     if (!node) return;
@@ -38,7 +43,7 @@
     // since we need to see the page post-navigation to be able to
     // make decisions.
     lastNavigationPromise = lastNavigationPromise.then(async () => {
-      const originalTextarea = document.querySelector('input:focus, textarea:focus');
+      const originalTextarea = findFocusedTextarea();
       if (!originalTextarea) return;
 
       // The textarea has a c-wiz ancestor. The Photos stuff seems to
@@ -386,6 +391,84 @@
       }
     }
   }
+  
+  async function editLocation() {
+    // Wait until the prior navigation has completed prior to acting
+    // since we need to see the page post-navigation to be able to
+    // make decisions.
+    lastNavigationPromise = lastNavigationPromise.then(async () => {
+      // Find the related CWiz.
+      const originalTextarea = findFocusedTextarea();
+      if (!originalTextarea) return;
+      
+      const cWizParent = findCWizParent(originalTextarea);
+      if (!cWizParent) return;
+
+      // Click the edit button.
+      document.querySelector('*[data-show-alias-location=true] div > svg').parentElement.click();
+      
+      // Wait for the dialog to appear.
+      const dialogSelector = '[role=dialog]';
+      const dialog = await whenElementQuerySelectorAsync(document.body, dialogSelector);
+      
+      // There are two ways to exit the location edit dialog. Either the edit is cancelled
+      // or an edit is made (even if the edit would be a no-op). If the edit is cancelled,
+      // then we should focus the textarea again immediately. Otherwise, we should wait for
+      // the CWiz to be replaced.
+      let editMade = false;
+      
+      const isEditCondition = function () {
+        const options = [...dialog.querySelectorAll('[role=listbox] [role=option]')];
+        const indexOfChosenOption = options.findIndex(option => option.matches('[aria-selected=true]'));
+        // Always an edit if an option other than the first is selected.
+        if (indexOfChosenOption !== 0) return true;
+        // If the first result has subtext (more than 3 spans), it is a search result rather than the original value.
+        if (indexOfChosenOption !== -1) {
+          const chosenOption = options[indexOfChosenOption];
+          if (chosenOption.querySelectorAll('span').length > 3) return true;
+          throw new Error('check for subtext');
+        }
+        return false;
+      };
+      
+      const handleBodyKeydown = function (e) {
+        if (e.key === 'Enter' && isEditCondition()) {
+          console.log(`Edit made due to using key ${e.key}`);
+          editMade = true;
+        }
+      };
+      document.body.addEventListener('keydown', handleBodyKeydown);
+      const handleMousedown = function (e) {
+        if (e.target.closest('*[role=listbox]' && isEditCondition())) {
+          console.log(`Edit made due to clicking inside of the listbox.`);
+          editMade = true;
+        }
+      };
+      document.body.addEventListener('mousedown', handleMousedown);
+      try {
+        // Wait for the dialog to disappear.
+        while (document.querySelector(dialogSelector)) await whenElementChangedAsync(document.body);
+      } finally {
+        document.body.removeEventListener('keydown', handleBodyKeydown);
+        document.body.removeEventListener('mousedown', handleMousedown);
+      }
+      
+      if (editMade) {
+        console.log(`location was edited; waiting for the cWiz to reload…`);
+        while (true) {
+          const currentTextarea = findTextarea(cWizParent);
+          if (currentTextarea && currentTextarea !== originalTextarea) break;
+          await whenElementChangedAsync(cWizParent);
+        }
+      }
+      
+      // Select the textarea—a new one if an edit was made.
+      const currentTextarea = findTextarea(cWizParent);
+      if (!currentTextarea) return;
+      console.log('focusing textarea');
+      currentTextarea.focus();
+    });
+  }
 
   if (!isTesting) {
     document.body.addEventListener('keydown', e => {
@@ -406,6 +489,10 @@
         } else if (e.key === '\'') {
           // Launch the “Add to album” workflow.
           addAlbum(e.target);
+        } else if (e.key === ',') {
+          // Launch the set Location workflow.
+          editLocation();
+          e.preventDefault();
         }
       }
     });
