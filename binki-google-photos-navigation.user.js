@@ -368,7 +368,10 @@
               await whenElementChangedAsync(document.body);
               continue;
             }
-            console.log('found dialog. Waiting for it to close');
+            console.log('found dialog.');
+            // Focus the listbox button so that the user can directly use arrow keys instead of needing to press tab first.
+            (await whenElementQuerySelectorAsync(document.body, `${dialogSelector} [role=listbox]`)).focus();
+            console.log('Waiting for album dialog to close');
             while (true) {
               if (document.querySelector(dialogSelector)) {
                 await whenElementChangedAsync(document.body);
