@@ -305,6 +305,7 @@
   });
   
   async function addAlbum(textElement) {
+    console.log('addAlbum()');
     const cWizParent = findCWizParent(textElement);
     // Open the dropdown menu.
     [...document.querySelectorAll('[role=menubar] > span > div > div + div + div:last-child')].find(dotsMenuElement => {
@@ -312,87 +313,88 @@
       // still in the DOM and clickable. It is earlier in the DOM than the onscreen, per-photo
       // one. So make sure to ignore invisible when searching for this menu.
     	return dotsMenuElement.offsetParent;
-    }).firstChild.click();
-    while (true) {
-      // Some menus exist which remain active which have multiple options. However, our menu has at least 4
-      // options. Which specific option we choose is itself complicated and cannot be expressed with a selector.
-      // But this selector can be used to tell whether the menu is present.
-      const arbitraryMenuButtonSelector = 'div[role=menu][data-back-to-cancel=false] > div > div > span + span + span + span';
-      const arbitraryMenuButton = document.querySelector(arbitraryMenuButtonSelector);
-      if (!arbitraryMenuButton) {
-        await whenElementChangedAsync(document.body);
-        continue;
-      }
-      // Different screens capable of adding an image to an album have different per-photo menus. Also, the menu
-      // varies depending on whether or not the photo has motion or is a video. So one way of selecting the correct
-      // menu button will not work universally. Here are two examples of link lists:
-      //
-      // * /photo for picture without motion “슬라이드쇼”, “다운로드Shift+D”, “왼쪽으로 회전Shift+R”, “앨범에 추가”, “공유 앨범에 추가”, “캔버스 인화 주문”, “사진 인화 주문”, “보관Shift+A”
-      // * /photo for picture with motion “スライドショー”, “ダウンロードShift+D”, “動画をダウンロード”, “左に回転Shift+R”, “アルバムに追加”, “共有アルバムへの追加”, “キャンバス プリントを注文”, “写真のプリントを注文”, “アーカイブShift+A”
-      // * /share for (same) picture with motion: “スライドショー”, “左に回転Shift+R”, “ダウンロードShift+D”, “動画をダウンロード”, “アルバムに追加”, “共有アルバムへの追加”, “キャンバス プリントを注文”, “写真のプリントを注文”, “アルバムカバーに設定”, “アルバムから削除#”, “ゴミ箱に移動”
-      // * /photo for video “スライドショー”, “動画をループ”, “ダウンロードShift+D”, “アルバムに追加”, “共有アルバムへの追加”, “アーカイブShift+A”
-      //
-      // So, it looks like our “アルバムに追加” link is:
-      //
-      // * after Shift+D (seems to be locale-independent!) if it exists
-      // * after Shift+R (seems to be locale-independent!) if it exists
-      // * after all items containing “ダウンロード”/“다운로드”/“Download” (locale-specific string which can be extracted from the entry with “Shift+D”)
-      //
-      // If an entry has a shortcut specified, it is in a separate div. So there is no need to manually separate
-      // it out. Start by scanning for everything.
-      const menu = [...arbitraryMenuButton.parentElement.querySelectorAll('span > div[jsaction]')].map(itemElement => {
-        return {
-          itemElement,
-          lowerText: itemElement.firstChild.textContent.toLowerCase(),
-          lowerShortcut: itemElement.children.length > 1 ? itemElement.children.item(1).textContent.toLowerCase() : null,
-        };
-      });
-      const downloadMenuItemIndex = menu.findIndex(item => item.lowerShortcut === 'shift+d');
-      const downloadVideoMenuItemIndex = downloadMenuItemIndex === -1 ? -1 : menu.findIndex((item, index) => index > downloadMenuItemIndex && item.lowerText.indexOf(downloadMenuItemIndex.lowerText) !== -1);
-      const rotateMenuItemIndex = menu.findIndex(item => item.lowerShortcut === 'shift+r');
-      // The add to album menu item is the first menu item with an index greater than all of the above.
-      // If we didn’t find any of the above options, then, well, we’ll probably launch the slideshow—that’s not
-      // *that* bad, right?
-      const addToAlbumMenuItemIndex = [downloadMenuItemIndex, downloadVideoMenuItemIndex, rotateMenuItemIndex].reduce((a, b) => Math.max(a, b)) + 1;
-      const addToAlbumButton = menu[addToAlbumMenuItemIndex].itemElement;
-      // It takes time to load and I do not think it shows progress, so just keep clicking until it works x.x.
+    }).querySelector('button').click();
+    const arbitraryMenuButtonSelector = 'ul[role=menu] > li + li + li + li';
+    const arbitraryMenuButton = await (async () => {
       while (true) {
-        addToAlbumButton.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-        addToAlbumButton.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-        await delayAsync(20);
-        if (!document.querySelector(arbitraryMenuButtonSelector)) {
-          // Wait for the dialog to appear.
-          while (true) {
-            const dialogSelector = '[role=dialog]';
-            if (!document.querySelector(dialogSelector)) {
-              await whenElementChangedAsync(document.body);
-              continue;
-            }
-            console.log('found dialog.');
-            // Focus the listbox button so that the user can directly use arrow keys instead of needing to press tab first.
-            (await whenElementQuerySelectorAsync(document.body, `${dialogSelector} [role=listbox]`)).focus();
-            console.log('Waiting for album dialog to close');
-            while (true) {
-              if (document.querySelector(dialogSelector)) {
-                await whenElementChangedAsync(document.body);
-                continue;
-              }
-              // If the dialog is closed by cancelling, we will end up incorrectly attempting to refocus the
-              // textarea later. For now, am going to accept that as a limitation.
-              while (true) {
-                const newTextElement = findTextarea(cWizParent);
-                if (!newTextElement || newTextElement === textElement) {
-                	await whenElementChangedAsync(cWizParent);
-                  continue;
-                }
-                newTextElement.focus();
-	              return;
-              }
-            }
-          }
-        }
+        // Some menus exist which remain active which have multiple options. However, our menu has at least 4
+        // options. Which specific option we choose is itself complicated and cannot be expressed with a selector.
+        // But this selector can be used to tell whether the menu is present.
+        const arbitraryMenuButton = document.querySelector(arbitraryMenuButtonSelector);
+        if (arbitraryMenuButton) return arbitraryMenuButton;
+        console.log('addAlbum(): waiting for dots menu to open');
+        await whenElementChangedAsync(document.body);
       }
+    })();
+    console.log('addAlbum(): dots menu opened');
+    // Different screens capable of adding an image to an album have different per-photo menus. Also, the menu
+    // varies depending on whether or not the photo has motion or is a video. So one way of selecting the correct
+    // menu button will not work universally. Here are two examples of link lists:
+    //
+    // * /photo for picture without motion “슬라이드쇼”, “다운로드Shift+D”, “왼쪽으로 회전Shift+R”, “앨범에 추가”, “공유 앨범에 추가”, “캔버스 인화 주문”, “사진 인화 주문”, “보관Shift+A”
+    // * /photo for picture with motion “スライドショー”, “ダウンロードShift+D”, “動画をダウンロード”, “左に回転Shift+R”, “アルバムに追加”, “共有アルバムへの追加”, “キャンバス プリントを注文”, “写真のプリントを注文”, “アーカイブShift+A”
+    // * /share for (same) picture with motion: “スライドショー”, “左に回転Shift+R”, “ダウンロードShift+D”, “動画をダウンロード”, “アルバムに追加”, “共有アルバムへの追加”, “キャンバス プリントを注文”, “写真のプリントを注文”, “アルバムカバーに設定”, “アルバムから削除#”, “ゴミ箱に移動”
+    // * /photo for video “スライドショー”, “動画をループ”, “ダウンロードShift+D”, “アルバムに追加”, “共有アルバムへの追加”, “アーカイブShift+A”
+    //
+    // So, it looks like our “アルバムに追加” link is:
+    //
+    // * after Shift+D (seems to be locale-independent!) if it exists
+    // * after Shift+R (seems to be locale-independent!) if it exists
+    // * after all items containing “ダウンロード”/“다운로드”/“Download” (locale-specific string which can be extracted from the entry with “Shift+D”)
+    //
+    // If an entry has a shortcut specified, it is in a separate div. So there is no need to manually separate
+    // it out. Start by scanning for everything.
+    const menu = [...arbitraryMenuButton.parentElement.querySelectorAll(':scope > li[jsaction]')].map(itemElement => {
+      const textSpanSelector = ':scope > span > span';
+      const textSpan = itemElement.querySelector(textSpanSelector);
+      if (!textSpan) {
+        console.log(itemElement);
+        throw new Error(`Unable to extract menu item text. Unable to find selector ${textSpanSelector} in element.`);
+      }
+      const shortcutSpan = textSpan.parentElement.nextElementSibling;
+      if (!shortcutSpan) {
+        console.log(textSpan, textSpan.parentElement.nextElementSibling);
+        throw new Error(`Unable to extract menu item text. Unable to find shortcut element next to text span element.`);
+      }
+      return {
+        itemElement,
+        lowerText: textSpan.textContent.toLowerCase(),
+        lowerShortcut: shortcutSpan.firstChild ? shortcutSpan.firstChild.textContent.toLowerCase() : null,
+      };
+    });
+    const downloadMenuItemIndex = menu.findIndex(item => item.lowerShortcut === 'shift+d');
+    const downloadVideoMenuItemIndex = downloadMenuItemIndex === -1 ? -1 : menu.findIndex((item, index) => index > downloadMenuItemIndex && item.lowerText.indexOf(downloadMenuItemIndex.lowerText) !== -1);
+    const rotateMenuItemIndex = menu.findIndex(item => item.lowerShortcut === 'shift+r');
+    // The add to album menu item is the first menu item with an index greater than all of the above.
+    // If we didn’t find any of the above options, then, well, we’ll probably launch the slideshow—that’s not
+    // *that* bad, right?
+    const addToAlbumMenuItemIndex = [downloadMenuItemIndex, downloadVideoMenuItemIndex, rotateMenuItemIndex].reduce((a, b) => Math.max(a, b)) + 1;
+    const addToAlbumButton = menu[addToAlbumMenuItemIndex].itemElement;
+    // It takes time to load and I do not think it shows progress, so just keep clicking until it works x.x.
+    addToAlbumButton.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+    addToAlbumButton.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+    while (document.querySelector(arbitraryMenuButtonSelector)) await whenElementChangedAsync(document.body);
+    // Wait for the dialog to appear. For some reason, an iframe[role=dialog] appears when saving
+    // the album assignment, so be sure to exclude that to detect the dialog closing properly.
+    const dialogSelector = 'div[role=dialog]';
+    const dialog = await whenElementQuerySelectorAsync(document.body, dialogSelector);
+    console.log('found dialog.');
+    // Focus the listbox button so that the user can directly use arrow keys instead of needing to press tab first.
+    (await whenElementQuerySelectorAsync(document.body, `${dialogSelector} [role=listbox]`)).focus();
+    console.log('Waiting for album dialog to close');
+    while (document.querySelector(dialogSelector)) await whenElementChangedAsync(document.body);
+    // If the dialog is closed by cancelling, we will end up incorrectly attempting to refocus the
+    // textarea later. For now, am going to accept that as a limitation.
+    while (true) {
+      const newTextElement = findTextarea(cWizParent);
+      if (newTextElement && newTextElement !== textElement) {
+        newTextElement.focus();
+        break;
+      }
+      console.log('Waiting for new text element to appear');
+      await whenElementChangedAsync(document.body);
     }
+    console.log('dialog closed');
   }
   
   async function editLocation() {
